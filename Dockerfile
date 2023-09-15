@@ -1,49 +1,32 @@
-FROM python:3.6
+FROM condaforge/mambaforge:4.12.0-0
 
-RUN     apt-get update && \
-        apt-get install -y \
-            automake \
-            bison \
-            build-essential \
-            cmake \
-            libboost-dev \
-            libgl1-mesa-dev \
-            libglu1-mesa-dev \
-            libharfbuzz-dev \
-            libpcre3-dev \
-            libsm6 \
-            wget
+RUN adduser --disabled-password --gecos "Default user" --uid 1000 cq && \
+    apt-get update -y && \
+    apt-get install --no-install-recommends -y libgl1-mesa-glx libglu1-mesa && \
+    apt-get clean
 
-WORKDIR /tmp/build
+RUN mamba create -n cq -y python=3.10 && \
+    mamba install -n cq -y -c conda-forge -c cadquery OCP=7.6.3 vtk=9.2 matplotlib=3.5 && \
+    mamba clean --all && \
+    find / -type f -name '*.py[co]' -delete -o -type d -name __pycache__ -delete
 
-ARG SWIG_VERSION=3.0.9
-ARG FREETYPE_VERSION=2.6.3
-ARG OCE_VERSION=0.18.3
-ARG SMESH_VERSION=6.7.6
-ARG PYTHONOCC_CORE_VERSION=0.18.1
+RUN mamba install -n cq -y -c conda-forge -c cadquery cadquery=master && \
+    mamba clean --all && \
+    find / -type f -name '*.py[co]' -delete -o -type d -name __pycache__ -delete
 
-COPY build-files/build_swig.sh /tmp
-COPY build-files/build_freetype.sh /tmp
-COPY build-files/build_oce.sh /tmp
-COPY build-files/build_smesh.sh /tmp
-COPY build-files/build_pythonocc_core.sh /tmp
+RUN . "/opt/conda/etc/profile.d/conda.sh" && conda activate cq && \
+    pip install jupyter-cadquery==3.5.2 cadquery-massembly~=1.0.0 jupyterlab~=3.5 voila~=0.3.5 && \
+    find / -type f -name '*.py[co]' -delete -o -type d -name __pycache__ -delete
 
-RUN chmod +x ../*.sh
+VOLUME /home/cq/
+WORKDIR /home/cq
+EXPOSE 8888
 
-RUN ../build_swig.sh $SWIG_VERSION
-RUN ../build_freetype.sh $FREETYPE_VERSION
-RUN ../build_oce.sh $OCE_VERSION
-RUN ../build_smesh.sh $SMESH_VERSION
-RUN ../build_pythonocc_core.sh $PYTHONOCC_CORE_VERSION
+USER cq 
 
-WORKDIR /
+ADD --chown=cq:cq examples /home/cq
+ADD --chown=cq:cq viewer.ipynb /home/cq
+ADD --chown=cq:cq run.sh /tmp
+RUN chmod +x /tmp/run.sh
 
-RUN     apt-get remove --auto-remove -y \
-            automake \
-            bison \
-            build-essential \
-            cmake \
-            libboost-dev \
-            libpcre3-dev \
-            wget && \
-        rm -rf /var/lib/apt/lists/*
+ENTRYPOINT ["/tmp/run.sh"]
